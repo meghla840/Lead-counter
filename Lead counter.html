@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Status Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1015;
+    --panel:#161923;
+    --panel-2:#1d2130;
+    --border:#282e40;
+    --text:#eef0f6;
+    --muted:#8c93a8;
+    --accent:#5b8cff;
+    --accent-dim: rgba(91,140,255,0.14);
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(70% 55% at 15% -10%, rgba(91,140,255,0.10), transparent 60%),
+      radial-gradient(60% 50% at 100% 100%, rgba(61,220,132,0.07), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family:'Inter', sans-serif;
+    padding: 48px 20px 80px;
+  }
+
+  .wrap{ max-width: 880px; margin: 0 auto; }
+
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color: var(--accent);
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .eyebrow .dot{
+    width:6px; height:6px; border-radius:50%;
+    background: var(--accent);
+    display:inline-block;
+  }
+
+  h1{
+    font-family:'Sora', sans-serif;
+    font-weight:700;
+    font-size: clamp(28px, 4.4vw, 38px);
+    line-height:1.2;
+    margin-bottom:12px;
+    letter-spacing:-0.5px;
+  }
+
+  .lede{
+    color: var(--muted);
+    font-size:15px;
+    line-height:1.65;
+    max-width: 600px;
+    margin-bottom: 40px;
+  }
+  .lede code{
+    font-family:'JetBrains Mono', monospace;
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    padding:1px 6px;
+    border-radius:5px;
+    font-size:13px;
+    color: var(--text);
+  }
+
+  /* ---------------- dropzone ---------------- */
+  #dropzone{
+    border: 1.5px dashed var(--border);
+    border-radius: 18px;
+    background: var(--panel);
+    padding: 52px 28px;
+    text-align:center;
+    cursor:pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  }
+  #dropzone:hover{ border-color: var(--accent); background: var(--panel-2); }
+  #dropzone.drag{ border-color: var(--accent); background: var(--accent-dim); transform: scale(1.005); }
+
+  #dropzone .icon{ font-size:34px; margin-bottom:14px; opacity:0.9; }
+  #dropzone .title{ font-family:'Sora', sans-serif; font-weight:600; font-size:16px; margin-bottom:6px; }
+  #dropzone .hint{ color: var(--muted); font-size:13.5px; }
+  #fileInput{ display:none; }
+
+  /* ---------------- states ---------------- */
+  #errorBox{
+    display:none;
+    margin-top:22px;
+    padding:16px 18px;
+    background: rgba(255,90,90,0.09);
+    border:1px solid rgba(255,90,90,0.3);
+    border-radius:12px;
+    color:#ffb3b3;
+    font-size:14px;
+    line-height:1.6;
+  }
+  #errorBox strong{ color:#ff8080; }
+
+  /* ---------------- results ---------------- */
+  #results{ display:none; margin-top:40px; }
+
+  .meta-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom: 34px;
+  }
+  .meta-tag{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color: var(--muted);
+    background: var(--panel);
+    border:1px solid var(--border);
+    padding:6px 12px;
+    border-radius:8px;
+  }
+  .meta-tag b{ color: var(--text); }
+
+  .report-section{ margin-bottom: 40px; }
+  .report-title{
+    font-family:'Sora', sans-serif;
+    font-weight:700;
+    font-size:17px;
+    color: var(--text);
+    margin-bottom:4px;
+    display:flex;
+    align-items:center;
+    gap:9px;
+  }
+  .report-title .col-tag{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    font-weight:600;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding:3px 9px;
+    border-radius:999px;
+  }
+  .report-missing{
+    color:#ffb3b3;
+    font-size:13.5px;
+    background: rgba(255,90,90,0.08);
+    border:1px solid rgba(255,90,90,0.25);
+    border-radius:12px;
+    padding:14px 16px;
+    margin-bottom: 12px;
+    line-height:1.6;
+  }
+
+  .stat-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap:14px;
+    margin: 16px 0 24px;
+  }
+  @media (max-width:480px){ .stat-grid{ grid-template-columns: 1fr 1fr; } }
+
+  .stat-card{
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding: 22px 20px;
+    position:relative;
+    overflow:hidden;
+  }
+  .stat-card .label{
+    font-size:12.5px;
+    font-weight:600;
+    color: var(--muted);
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:10px;
+  }
+  .stat-card .num{
+    font-family:'JetBrains Mono', monospace;
+    font-size:38px;
+    font-weight:700;
+    line-height:1;
+    margin-bottom:8px;
+  }
+  .stat-card .pct{ font-size:12.5px; color: var(--muted); }
+  .stat-card.total{ border-color: var(--border); }
+  .stat-card.cat{
+    border-color: color-mix(in srgb, var(--cat-color) 35%, var(--border));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--cat-color) 14%, transparent), var(--panel) 60%);
+  }
+  .stat-card.cat .num{ color: var(--cat-color); }
+
+  .bar-track{
+    height:6px;
+    border-radius:4px;
+    background: var(--panel-2);
+    overflow:hidden;
+    margin-top:12px;
+  }
+  .bar-fill{
+    height:100%;
+    border-radius:4px;
+    transition: width 0.6s ease;
+    background: var(--cat-color);
+  }
+
+  .section-title{
+    font-family:'Sora', sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    color: var(--text);
+    margin-bottom:12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .section-title .count{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color: var(--muted);
+    font-weight:500;
+  }
+
+  .other-list{ display:flex; flex-direction:column; gap:8px; }
+  .other-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding: 12px 16px;
+  }
+  .other-row .name{
+    flex:0 0 140px;
+    font-size:13.5px;
+    font-weight:600;
+    color: var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .other-row .name.empty{ color: var(--muted); font-style:italic; font-weight:500; }
+  .other-row .track{ flex:1; height:6px; border-radius:4px; background: var(--panel-2); overflow:hidden; }
+  .other-row .track .fill{ height:100%; background: var(--accent); border-radius:4px; }
+  .other-row .n{
+    flex:0 0 auto;
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px;
+    color: var(--muted);
+    min-width:34px;
+    text-align:right;
+  }
+
+  .empty-note{ color: var(--muted); font-size:13.5px; padding: 4px 2px 4px; }
+
+  .divider{ height:1px; background: var(--border); margin: 36px 0; border:none; }
+
+  #resetBtn{
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    color: var(--muted);
+    background: var(--panel);
+    border:1px solid var(--border);
+    padding:10px 18px;
+    border-radius:10px;
+    cursor:pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  #resetBtn:hover{ color: var(--text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="eyebrow"><span class="dot"></span>status counter</div>
+  <h1>Break down your Status and Product columns, automatically</h1>
+  <p class="lede">Drop in an <code>.xlsx</code>, <code>.xls</code>, or <code>.csv</code> file. This finds the <code>Status</code> column and counts <b>Office Visit</b>, <b>After Office Visit</b>, <b>New</b>, <b>Followup</b>, and <b>File Open</b> rows, then finds the <code>Product</code> column and counts <b>EB3</b> and <b>Malta</b> rows — plus lists any other values it finds in each. Everything runs in your browser, nothing is uploaded anywhere.</p>
+
+  <div id="dropzone">
+    <div class="icon">📄</div>
+    <div class="title">Drop your file here, or click to browse</div>
+    <div class="hint">.xlsx · .xls · .csv</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  </div>
+
+  <div id="errorBox"></div>
+
+  <div id="results">
+    <div class="meta-row" id="metaRow"></div>
+    <div id="reportSections"></div>
+    <button id="resetBtn">Check another file</button>
+  </div>
+</div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const errorBox = document.getElementById('errorBox');
+  const results = document.getElementById('results');
+  const resetBtn = document.getElementById('resetBtn');
+
+  dropzone.addEventListener('click', ()=> fileInput.click());
+
+  ['dragenter','dragover'].forEach(evt=>{
+    dropzone.addEventListener(evt, (e)=>{ e.preventDefault(); dropzone.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    dropzone.addEventListener(evt, (e)=>{ e.preventDefault(); dropzone.classList.remove('drag'); });
+  });
+  dropzone.addEventListener('drop', (e)=>{
+    const file = e.dataTransfer.files[0];
+    if(file) handleFile(file);
+  });
+  fileInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(file) handleFile(file);
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    results.style.display = 'none';
+    errorBox.style.display = 'none';
+    fileInput.value = '';
+  });
+
+  function showError(msg){
+    errorBox.innerHTML = msg;
+    errorBox.style.display = 'block';
+    results.style.display = 'none';
+  }
+
+  function normalize(str){
+    return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ---- each entry here is one column this tool tracks. Add/edit freely. ----
+  const reportConfigs = [
+    {
+      key:'status',
+      columnKeywords:['status'],
+      title:'Status breakdown',
+      categories: [
+        { label:'Office Visit',       variants:['officevisit', 'office'],                              color:'#5b8cff' },
+        { label:'After Office Visit', variants:['afterofficevisit', 'after office visit', 'aftervisit'], color:'#fb7185' },
+        { label:'New',                variants:['new'],                                                color:'#a78bfa' },
+        { label:'Followup',           variants:['followup', 'follow up', 'follow-up'],                 color:'#ffcf5c' },
+        { label:'File Open',          variants:['fileopen', 'file open'],                              color:'#2dd4bf' }
+      ]
+    },
+    {
+      key:'product',
+      columnKeywords:['product'],
+      title:'Product breakdown',
+      categories: [
+        { label:'EB3',   variants:['eb3'],   color:'#38bdf8' },
+        { label:'Malta', variants:['malta'], color:'#fbbf24' }
+      ]
+    }
+  ];
+
+  function findColumnIndex(headerRow, keywords){
+    let idx = headerRow.findIndex(h => keywords.includes(h.toLowerCase()));
+    if(idx === -1){
+      idx = headerRow.findIndex(h => keywords.some(k => h.toLowerCase().includes(k)));
+    }
+    return idx;
+  }
+
+  function handleFile(file){
+    errorBox.style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type:'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
+
+        if(!rows.length){
+          showError('This file looks empty — there are no rows to read.');
+          return;
+        }
+
+        const headerRow = rows[0].map(h => String(h).trim());
+        const dataRows = rows.slice(1).filter(r => r.some(cell => String(cell).trim() !== ''));
+
+        const reportResults = reportConfigs.map(config=>{
+          const colIndex = findColumnIndex(headerRow, config.columnKeywords);
+          if(colIndex === -1){
+            return { config, found:false };
+          }
+
+          const categories = config.categories.map(c => ({ ...c, normVariants: c.variants.map(normalize), count:0 }));
+          const others = new Map();
+
+          dataRows.forEach(r=>{
+            const raw = r[colIndex] !== undefined ? String(r[colIndex]).trim() : '';
+            const norm = normalize(raw);
+            const match = categories.find(c => c.normVariants.includes(norm));
+            if(match){ match.count++; }
+            else{
+              const key = raw === '' ? '(empty)' : raw;
+              others.set(key, (others.get(key) || 0) + 1);
+            }
+          });
+
+          return { config, found:true, columnName: headerRow[colIndex], categories, others };
+        });
+
+        if(reportResults.every(r => !r.found)){
+          showError(`<strong>No matching columns found.</strong><br>Columns in this sheet: ${headerRow.filter(Boolean).map(h=>`<code style="font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:5px;">${escapeHtml(h)}</code>`).join(' ') || '(none detected)'}`);
+          return;
+        }
+
+        renderResults({
+          fileName: file.name,
+          sheetName,
+          total: dataRows.length,
+          reportResults,
+          allColumns: headerRow.filter(Boolean)
+        });
+
+      } catch(err){
+        showError('Could not read this file. Please make sure it\'s a valid .xlsx, .xls, or .csv file.');
+      }
+    };
+    reader.onerror = ()=> showError('Something went wrong while reading the file. Please try again.');
+    reader.readAsArrayBuffer(file);
+  }
+
+  function buildStatGrid(total, categories){
+    let html = `
+      <div class="stat-card total">
+        <div class="label">Total rows</div>
+        <div class="num">${total}</div>
+        <div class="pct">${total} row${total===1?'':'s'} checked</div>
+      </div>
+    `;
+    categories.forEach(c=>{
+      const pct = total ? Math.round((c.count/total)*100) : 0;
+      html += `
+        <div class="stat-card cat" style="--cat-color:${c.color}">
+          <div class="label">${escapeHtml(c.label)}</div>
+          <div class="num">${c.count}</div>
+          <div class="pct">${pct}% of rows</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div>
+      `;
+    });
+    return html;
+  }
+
+  function buildOtherList(others, categoryLabelSummary){
+    if(others.size === 0){
+      return `<div class="empty-note">No other values — just ${categoryLabelSummary}.</div>`;
+    }
+    const maxCount = Math.max(...others.values());
+    const sorted = [...others.entries()].sort((a,b)=> b[1]-a[1]);
+    return sorted.map(([label, count])=>{
+      const isEmpty = label === '(empty)';
+      return `
+        <div class="other-row">
+          <span class="name ${isEmpty?'empty':''}">${escapeHtml(label)}</span>
+          <span class="track"><span class="fill" style="width:${(count/maxCount)*100}%"></span></span>
+          <span class="n">${count}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderResults(d){
+    document.getElementById('metaRow').innerHTML = `
+      <span class="meta-tag">file · <b>${escapeHtml(d.fileName)}</b></span>
+      <span class="meta-tag">sheet · <b>${escapeHtml(d.sheetName)}</b></span>
+      <span class="meta-tag">rows checked · <b>${d.total}</b></span>
+    `;
+
+    const container = document.getElementById('reportSections');
+    container.innerHTML = '';
+
+    d.reportResults.forEach((r, i)=>{
+      const section = document.createElement('div');
+      section.className = 'report-section';
+
+      if(!r.found){
+        section.innerHTML = `
+          <div class="report-title">${escapeHtml(r.config.title)}</div>
+          <div class="report-missing">
+            <strong>No "${escapeHtml(r.config.columnKeywords[0])}" column found</strong> in this sheet, so this section is skipped.<br>
+            Columns available: ${d.allColumns.map(h=>`<code style="font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:5px;">${escapeHtml(h)}</code>`).join(' ')}
+          </div>
+        `;
+        container.appendChild(section);
+      } else {
+        const labelSummary = r.categories.map(c=>c.label).join(' and ');
+        section.innerHTML = `
+          <div class="report-title">${escapeHtml(r.config.title)} <span class="col-tag">column: ${escapeHtml(r.columnName)}</span></div>
+          <div class="stat-grid">${buildStatGrid(d.total, r.categories)}</div>
+          <div class="section-title">Other values found <span class="count">${r.others.size ? `(${r.others.size} distinct)` : ''}</span></div>
+          <div class="other-list">${buildOtherList(r.others, labelSummary)}</div>
+        `;
+        container.appendChild(section);
+      }
+
+      if(i < d.reportResults.length - 1){
+        const hr = document.createElement('hr');
+        hr.className = 'divider';
+        container.appendChild(hr);
+      }
+    });
+
+    results.style.display = 'block';
+  }
+</script>
+
+</body>
+</html>
